@@ -102,7 +102,7 @@ def cmd_undo(args):
 
 def cmd_auto(args):
     app = P.App(args.app)
-    return P.auto(app, quiet=args.quiet)
+    return P.auto(app, restart=args.restart, quiet=args.quiet)
 
 
 def cmd_doctor(args):
@@ -142,6 +142,53 @@ def cmd_watch(args):
     return 0
 
 
+def cmd_scaffold(args):
+    app = P.App(args.app)
+    if args.from_patch:
+        base = P.patch_by_id(P.load_patches(), args.from_patch)
+        patch = json.loads(json.dumps(base))
+        patch["app_versions"] = [app.version]
+        patch["builds"] = [app.build]
+        patch["id"] = args.id
+        patch["title"] = args.title or patch.get("title", "")
+        patch["_file"] = ""
+        patch.pop("_file", None)
+    else:
+        if not args.find or args.replace is None:
+            print("error: --find and --replace are required without --from", file=sys.stderr)
+            return 2
+        patch = {
+            "schema": P.SCHEMA,
+            "id": args.id,
+            "app": "cua-spaces",
+            "title": args.title or args.id,
+            "description": "Scaffolded patch. Verify the marker against the current bundle.",
+            "app_versions": [app.version],
+            "builds": [app.build],
+            "try_on_unknown": True,
+            "default": True,
+            "depends_on": [],
+            "targets": [
+                {
+                    "kind": "text",
+                    "glob": args.glob,
+                    "find": args.find,
+                    "replace": args.replace,
+                    "expect": 1,
+                }
+            ],
+            "verify": [
+                {"kind": "text_present", "glob": args.glob, "text": args.replace},
+                {"kind": "js_syntax", "glob": args.glob},
+            ],
+        }
+    out = P.PATCH_ROOT / patch["app"] / f"{args.id.split('/')[-1]}.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    P.write_json(out, patch)
+    print(out)
+    return 0
+
+
 def cmd_patches(args):
     for patch in P.load_patches():
         print(f"{patch['id']:44} {patch.get('title', '')}")
@@ -178,6 +225,7 @@ def main(argv=None):
     p.set_defaults(func=cmd_undo)
 
     p = sub.add_parser("auto", help="apply defaults, collect a report on mismatch")
+    p.add_argument("--restart", action="store_true", help="quit and reopen the app after a change")
     p.add_argument("--quiet", action="store_true")
     p.set_defaults(func=cmd_auto)
 
@@ -191,6 +239,15 @@ def main(argv=None):
     p = sub.add_parser("watch", help="install or remove the post-update watcher")
     p.add_argument("action", choices=["install", "uninstall", "status"])
     p.set_defaults(func=cmd_watch)
+
+    p = sub.add_parser("scaffold", help="write a patch skeleton for the current app version")
+    p.add_argument("--id", required=True)
+    p.add_argument("--title")
+    p.add_argument("--find")
+    p.add_argument("--replace")
+    p.add_argument("--glob", default="**/assets/*.js")
+    p.add_argument("--from", dest="from_patch")
+    p.set_defaults(func=cmd_scaffold)
 
     p = sub.add_parser("patches", help="list patches")
     p.set_defaults(func=cmd_patches)

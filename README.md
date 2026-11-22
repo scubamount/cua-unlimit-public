@@ -1,29 +1,63 @@
-# cua-unlimit-public
+# cua-unlimit
 
-Reversible display patches for the Cua Spaces desktop client on macOS and Windows. The defaults hide usage-limit notices and upgrade prompts and make Settings display **Teams**, even for a Free account. They do not grant Pro or Teams, change billing, create seats, or override server-side limits. The app itself is not included.
+Remove the Cua Spaces premium limits, then remove the client-side display of them.
 
-## Inspect before applying
+Two steps:
 
-Requires Python 3.10 or later. Node.js is optional for checking JavaScript syntax. From the repository root:
+1. **Remove the real restriction.** Run a self-hosted relay with plan enforcement off. The relay still meters usage but does not refuse a session past the Free plan limits. The hosted relay still enforces them.
+2. **Remove the display.** Apply the five UI patches. They hide the cap, the upsell and the plan label so the client matches the unenforced state.
+
+The patches alone do not change server-side enforcement. See [docs/relay.md](docs/relay.md) for the relay step.
+
+## Relay
+
+```sh
+CUA_RELAY_PUBLIC_URL=https://relay.example.com bash scripts/relay-run.sh
+CUA_RELAY_URL=https://relay.example.com bash scripts/relay-join.sh
+```
+
+`relay-run.sh` starts `cua-relay` with `CUA_RELAY_ENFORCE_PLANS` empty and `--device-enrollment off`. `relay-join.sh` registers this computer on that relay and points the host config at it. Repeat the join on every computer.
+
+## Patches
+
+Requires Python 3.10 or later. Quit Cua Spaces before changing its files.
 
 ```sh
 python3 bin/cua-unlimit patches
-python3 bin/cua-unlimit status
-```
-
-On Windows use `py -3 bin/cua-unlimit status`. For a nonstandard install, put `--app PATH` before the subcommand. The JSON files in [`patches/cua-spaces`](patches/cua-spaces/) define the supported versions and expected matches.
-
-## Apply and restore
-
-Quit the app before changing its resources. Use only a copy you own or administer. Modifying a signed macOS app invalidates its resource seal. If macOS or your administrator blocks launch, restore the original files or reinstall the signed vendor build. Do not weaken launch protections.
-
-```sh
 python3 bin/cua-unlimit apply
 python3 bin/cua-unlimit doctor
 ```
 
-Reopen the app normally to see the changes. The optional watcher can reapply patches after you restore the files. If you installed it, run `python3 bin/cua-unlimit watch uninstall` first. Then quit the app and run `python3 bin/cua-unlimit undo --all`. Keep the backup directory until restoration succeeds.
+| Patch | Change |
+|---|---|
+| `0001-ui-hours-uncap` | Hide the 20-hour remote-hours cap |
+| `0002-ui-sessions-uncap` | Hide the 2-computers-in-use cap |
+| `0003-ui-plan-pro` | Show the account as Pro |
+| `0004-ui-plan-teams` | Show the account as Teams |
+| `0005-ui-allowance-banner` | Hide the Home allowance card |
 
-`doctor` checks files, not whether the app launches or the account has a paid entitlement. Diagnostic reports are local and not redacted. Do not post them or backups in public issues.
+Patches 0003 and 0004 change the displayed plan only. They do not grant Pro or Teams, change billing, create seats, or remove server-side enforcement. The relay still meters.
 
-See the [command and recovery reference](docs/reference.md) for updates, backups, and diagnostic privacy. Run the fixture tests with `python3 -m unittest discover -s tests`. This independent tool is distributed under the [MIT license](LICENSE).
+Reopen the app after `apply`. To restore every recorded change, quit the app and run:
+
+```sh
+python3 bin/cua-unlimit watch uninstall   # if the optional watcher is installed
+python3 bin/cua-unlimit undo --all
+```
+
+A passing `doctor` checks files, not whether the app launches or the account has a paid entitlement. Diagnostic reports are local and not redacted.
+
+## Layout
+
+```
+bin/cua-unlimit        CLI
+lib/patchlib.py        patch engine
+patches/cua-spaces/    UI patch catalog
+scripts/relay-run.sh   self-hosted relay with enforcement off
+scripts/relay-join.sh  register a computer on that relay
+tests/                 engine tests
+```
+
+Run the tests with `python3 -m unittest discover -s tests`.
+
+MIT. Cua Spaces itself is Cua AI, Inc.'s, distributed under FSL-1.1-MIT. This repository patches an installed copy; it does not redistribute the app.

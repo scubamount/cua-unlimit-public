@@ -4,8 +4,8 @@ A small, dependency-free engine for applying text and byte patches to a
 macOS .app bundle or a Windows Electron install, with per-operation backups,
 verification, rollback, and post-update report collection.
 
-Patches are JSON files under
-patches/<app>/<id>.json; see docs/reference.md.
+The engine knows nothing about Cua Spaces. Patches are JSON files under
+patches/<app>/<id>.json; see docs/patch-format.md.
 """
 
 from __future__ import annotations
@@ -13,7 +13,6 @@ from __future__ import annotations
 import csv
 import fnmatch
 import hashlib
-import io
 import json
 import os
 import platform
@@ -399,6 +398,47 @@ class App:
                 "detail": (status.strip() + " " + subject.strip()).strip(),
             }
         return {"ok": True, "kind": "none", "detail": "not checked"}
+
+    def restart(self) -> None:
+        if IS_WINDOWS:
+            if not self.executable:
+                return
+            run(["taskkill", "/IM", self.executable.name], timeout=30)
+            for _ in range(20):
+                if not self.running():
+                    break
+                time.sleep(0.5)
+            if self.running():
+                run(["taskkill", "/F", "/IM", self.executable.name], timeout=30)
+            subprocess.Popen(
+                [str(self.executable)],
+                cwd=str(self.path),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            time.sleep(3)
+            return
+        if IS_MACOS:
+            run(["osascript", "-e", f'tell application id "{self.bundle_id}" to quit'], timeout=30)
+            time.sleep(2)
+            if self.running():
+                run(["pkill", "-f", str(self.path / "Contents")], timeout=30)
+                time.sleep(1)
+            if self.executable:
+                # Direct exec avoids Gatekeeper re-assessment of a resource-patched
+                # bundle, which rejects the invalidated signature on relaunch.
+                subprocess.Popen(
+                    [str(self.executable)],
+                    cwd=str(self.path),
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+            else:
+                run(["open", "-a", str(self.path)], timeout=30)
+            time.sleep(3)
+            run(["osascript", "-e", f'tell application id "{self.bundle_id}" to activate'], timeout=30)
+
 
 # patches
 
@@ -981,17 +1021,17 @@ def collect(app: App, out_dir: Path | None = None) -> Path:
         if info_path.exists():
             tar.add(info_path, arcname="Info.plist")
         if asar_package:
-            payload = (json.dumps(asar_package, indent=2) + "\n").encode()
-            entry = tarfile.TarInfo("package.json")
-            entry.size = len(payload)
-            tar.addfile(entry, io.BytesIO(payload))
+            package_path = out_dir / "package.json"
+            write_json(package_path, asar_package)
+            tar.add(package_path, arcname="package.json")
+            package_path.unlink()
     return report_path
 
 
 # auto
 
 
-def auto(app: App, quiet: bool = False) -> int:
+def auto(app: App, restart: bool = False, quiet: bool = False) -> int:
     patches = load_patches()
     defaults = [p for p in patches if p.get("default", True)]
     try:
@@ -1014,13 +1054,20 @@ def auto(app: App, quiet: bool = False) -> int:
             else:
                 print(f"no patch matches {app.version} ({app.build}); report: {path}")
             return 1
+    if changed and restart:
+        restart_app(app)
     if not quiet:
         if changed:
             print(f"applied {len(changed)} patch operation(s) to {app.version} ({app.build})")
-            print("quit and reopen Cua Spaces to load the patched UI")
+            if not restart:
+                print("quit and reopen Cua Spaces to load the patched UI")
         else:
             print(f"nothing to do: {app.version} ({app.build}) is patched")
     return 0
+
+
+def restart_app(app: App) -> None:
+    app.restart()
 
 
 # watch
