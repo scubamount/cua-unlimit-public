@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "id": "cua-spaces/0002-ui-sessions-uncap",
+  "app": "cua-spaces",
+  "title": "Remove the Free plan's 2-computers-in-use cap",
+  "description": "Builds on 0001: also nulls liveSessionsLimit. In the cua-home WASM `relayUsage.view`, that turns the 2-of-2 cap into `Computers in use 2`, drops the limit notice, and makes the plan card say `No limit on remote use`. The relay still meters; this is the display and client-prompt layer only. Works on the macOS WebUI bundle and the Windows Electron resources/web bundle.",
+  "app_versions": [
+    "0.22.3",
+    "0.33.*",
+    "0.34.*",
+    "0.36.*",
+    "0.38.*",
+    "0.39.*",
+    "0.40.*",
+    "0.41.*"
+  ],
+  "builds": [],
+  "try_on_unknown": false,
+  "default": true,
+  "depends_on": [
+    "cua-spaces/0001-ui-hours-uncap"
+  ],
+  "applied_if": [
+    "this.usage=e?.metered?{...e,hoursLimit:null,softLimitReached:!1,warnings:[],liveSessionsLimit:null"
+  ],
+  "targets": [
+    {
+      "kind": "text",
+      "glob": "**/assets/*.js",
+      "find": "set(e){this.usage=e?.metered?{...e,hoursLimit:null,softLimitReached:!1,warnings:[]}:null;",
+      "replace": "set(e){this.usage=e?.metered?{...e,hoursLimit:null,softLimitReached:!1,warnings:[],liveSessionsLimit:null}:null;",
+      "expect": 1
+    }
+  ],
+  "verify": [
+    {
+      "kind": "text_present",
+      "glob": "**/assets/*.js",
+      "text": "this.usage=e?.metered?{...e,hoursLimit:null,softLimitReached:!1,warnings:[],liveSessionsLimit:null}:null;"
+    },
+    {
+      "kind": "js_syntax",
+      "glob": "**/assets/*.js"
+    }
+  ],
+  "notes": "Applied by default after 0001. The 2-of-2 string itself is rendered by the native/WASM cua-home view; this patch removes the relay-usage cap the view reads."
+}

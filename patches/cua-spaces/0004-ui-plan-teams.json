@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "id": "cua-spaces/0004-ui-plan-teams",
+  "app": "cua-spaces",
+  "title": "Show the account as Teams, the top plan",
+  "description": "Builds on 0003: changes plan to `teams`, the top organizational membership. Settings reads `Teams plan` and the plan card shows `Manage seats`; the Pro banner, Upgrade button and Teams upsell disappear. The relay still reports the real plan and meters; the team-owned computers, roles and device approval that Teams provides are server-side and are not created by this patch.",
+  "app_versions": [
+    "0.22.3",
+    "0.33.*",
+    "0.34.*",
+    "0.36.*",
+    "0.38.*",
+    "0.39.*",
+    "0.40.*",
+    "0.41.*"
+  ],
+  "builds": [],
+  "try_on_unknown": false,
+  "default": true,
+  "depends_on": [
+    "cua-spaces/0003-ui-plan-pro"
+  ],
+  "targets": [
+    {
+      "kind": "text",
+      "glob": "**/assets/*.js",
+      "find": "set(e){this.usage=e?.metered?{...e,hoursLimit:null,softLimitReached:!1,warnings:[],liveSessionsLimit:null,plan:\"pro\"}:null;",
+      "replace": "set(e){this.usage=e?.metered?{...e,hoursLimit:null,softLimitReached:!1,warnings:[],liveSessionsLimit:null,plan:\"teams\"}:null;",
+      "expect": 1
+    }
+  ],
+  "verify": [
+    {
+      "kind": "text_present",
+      "glob": "**/assets/*.js",
+      "text": "liveSessionsLimit:null,plan:\"teams\"}"
+    },
+    {
+      "kind": "js_syntax",
+      "glob": "**/assets/*.js"
+    }
+  ],
+  "notes": "Default. This is a client display change only. To show Pro instead of Teams, apply through 0003 and skip 0004."
+}

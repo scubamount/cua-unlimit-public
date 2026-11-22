@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "id": "cua-spaces/0001-ui-hours-uncap",
+  "app": "cua-spaces",
+  "title": "Hide the Free plan's 20-hour remote-hours cap",
+  "description": "The web UI's RelayUsageStore is the single place the relay.usage answer lands. Null hoursLimit and clear softLimitReached/warnings so the Settings usage bar, the allowance sentence, the 80%/100% notice and the hours upsell never render. The computers-in-use limit is untouched. Works on the macOS WebUI bundle and the Windows Electron resources/web bundle.",
+  "app_versions": [
+    "0.22.3",
+    "0.33.*",
+    "0.34.*",
+    "0.36.*",
+    "0.38.*",
+    "0.39.*",
+    "0.40.*",
+    "0.41.*"
+  ],
+  "builds": [],
+  "try_on_unknown": false,
+  "default": true,
+  "depends_on": [],
+  "targets": [
+    {
+      "kind": "text",
+      "glob": "**/assets/*.js",
+      "find": "set(e){this.usage=e?.metered?e:null;",
+      "replace": "set(e){this.usage=e?.metered?{...e,hoursLimit:null,softLimitReached:!1,warnings:[]}:null;",
+      "expect": 1
+    }
+  ],
+  "verify": [
+    {
+      "kind": "text_present",
+      "glob": "**/assets/*.js",
+      "text": "this.usage=e?.metered?{...e,hoursLimit:null,"
+    },
+    {
+      "kind": "text_absent",
+      "glob": "**/assets/*.js",
+      "text": "set(e){this.usage=e?.metered?e:null;"
+    },
+    {
+      "kind": "js_syntax",
+      "glob": "**/assets/*.js"
+    }
+  ],
+  "applied_if": [
+    "this.usage=e?.metered?{...e,hoursLimit:null,"
+  ],
+  "notes": "If the marker moves, run `cua-unlimit collect` and read reports/*.json: asset_inventory[].contexts['this.usage'] and patches[].targets[].near_misses carry the new minified text. Keep the replacement semantically identical: spread the usage object and null hoursLimit."
+}

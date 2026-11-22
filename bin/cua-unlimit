@@ -1,0 +1,206 @@
+#!/usr/bin/env python3
+"""cua-unlimit command line."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+
+import patchlib as P
+
+
+def cmd_status(args):
+    app = P.App(args.app)
+    st = P.status(app)
+    print(f"{st['app']}")
+    print(
+        f"version {st['version']} ({st['build']}), layout {app.layout}, "
+        f"running: {'yes' if st['running'] else 'no'}"
+    )
+    print()
+    print(f"{'patch':44} {'default':7} {'version':7} state")
+    for row in st["patches"]:
+        print(
+            f"{row['id']:44} {str(row['default']):7} "
+            f"{'match' if row['version_match'] else ('try' if row['try_on_unknown'] else 'no'):7} {row['state']}"
+        )
+    print()
+    ops = st["operations"]
+    print(f"operations applied: {len(ops)}")
+    for op in ops:
+        print(f"  {op['patch']}  {op['applied_at']}  {len(op.get('files', []))} file(s)")
+
+
+def cmd_apply(args):
+    app = P.App(args.app)
+    patches = P.load_patches()
+    if args.patch:
+        selected = []
+        for pid in args.patch:
+            patch = P.patch_by_id(patches, pid)
+            selected.append(patch)
+            for dep in patch.get("depends_on", []):
+                selected.append(P.patch_by_id(patches, dep))
+        # de-dupe, preserve order
+        seen = set()
+        selected = [p for p in selected if not (p["id"] in seen or seen.add(p["id"]))]
+        candidates = selected
+    elif args.all:
+        selected = [p for p in patches if P.patch_applies(p, app)]
+        candidates = selected or [p for p in patches if p.get("default", True)] or patches
+    else:
+        selected = [p for p in patches if p.get("default", True)]
+        candidates = selected
+    try:
+        ops = P.apply_many(app, selected, dry_run=args.dry_run)
+    except P.PatchError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        print("run `cua-unlimit collect` for a report", file=sys.stderr)
+        return 1
+    changed = [op for op in ops if not op.get("noop")]
+    if not changed:
+        states = {p["id"]: P.patch_state(app, p) for p in candidates}
+        if (
+            candidates
+            and not any(s == "applied" for s in states.values())
+            and not any(P.patch_applies(p, app) for p in candidates)
+        ):
+            if args.dry_run:
+                print(f"no patch matches {app.version} ({app.build})", file=sys.stderr)
+                return 1
+            path = P.collect(app)
+            print(f"no patch matches {app.version} ({app.build}); report: {path}", file=sys.stderr)
+            return 1
+        print("already patched; nothing to do")
+        return 0
+    for op in changed:
+        print(f"{'would apply' if args.dry_run else 'applied'} {op['patch']} ({len(op.get('files', []))} file(s))")
+    if not args.dry_run:
+        print("quit and reopen Cua Spaces to load the patched UI")
+    return 0
+
+
+def cmd_undo(args):
+    app = P.App(args.app)
+    try:
+        restored = P.undo(app, all_ops=args.all)
+    except P.PatchError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    if not restored:
+        print("nothing to undo")
+        return 0
+    for r in restored:
+        print(f"restored {r['path']}")
+    print("quit and reopen Cua Spaces to load the original UI")
+    return 0
+
+
+def cmd_auto(args):
+    app = P.App(args.app)
+    return P.auto(app, quiet=args.quiet)
+
+
+def cmd_doctor(args):
+    app = P.App(args.app)
+    report = P.doctor(app)
+    P.REPORT_DIR.mkdir(parents=True, exist_ok=True)
+    out = P.REPORT_DIR / f"doctor-{P.stamp()}-{app.version}.json"
+    P.write_json(out, report)
+    for check in report["checks"]:
+        mark = "ok  " if check["ok"] else ("warn" if check["level"] == "warn" else "FAIL")
+        print(f"{mark} {check['name']}: {check['detail']}")
+    print()
+    print(f"overall: {'ok' if report['ok'] else 'fail'}")
+    print(f"report: {out}")
+    return 0 if report["ok"] else 1
+
+
+def cmd_collect(args):
+    app = P.App(args.app)
+    out = Path(args.out).expanduser() if args.out else None
+    path = P.collect(app, out_dir=out)
+    print(path)
+    return 0
+
+
+def cmd_watch(args):
+    app = P.App(args.app)
+    if args.action == "install":
+        path = P.watch_install(app)
+        print(f"installed {path}")
+    elif args.action == "uninstall":
+        path = P.watch_uninstall()
+        print(f"removed {path}")
+    else:
+        st = P.watch_status()
+        print(json.dumps(st, indent=2))
+    return 0
+
+
+def cmd_patches(args):
+    for patch in P.load_patches():
+        print(f"{patch['id']:44} {patch.get('title', '')}")
+    return 0
+
+
+def cmd_version(args):
+    app = P.App(args.app)
+    print(f"cua-unlimit {P.SCHEMA}")
+    print(f"app {app.version} ({app.build}) layout {app.layout} at {app.path}")
+    return 0
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="cua-unlimit", description="Reversible patches for Cua Spaces")
+    parser.add_argument(
+        "--app",
+        default=None,
+        help="path to Cua Spaces.app (macOS) or the install dir (Windows); default: auto-detect",
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("status", help="show patch state")
+    p.set_defaults(func=cmd_status)
+
+    p = sub.add_parser("apply", help="apply patches")
+    p.add_argument("--patch", action="append", help="patch id (repeatable)")
+    p.add_argument("--all", action="store_true", help="apply every patch that matches this version")
+    p.add_argument("--dry-run", action="store_true")
+    p.set_defaults(func=cmd_apply)
+
+    p = sub.add_parser("undo", help="restore backed-up files")
+    p.add_argument("--all", action="store_true", help="undo every recorded operation")
+    p.set_defaults(func=cmd_undo)
+
+    p = sub.add_parser("auto", help="apply defaults, collect a report on mismatch")
+    p.add_argument("--quiet", action="store_true")
+    p.set_defaults(func=cmd_auto)
+
+    p = sub.add_parser("doctor", help="check app, patches, backups, syntax, relay usage")
+    p.set_defaults(func=cmd_doctor)
+
+    p = sub.add_parser("collect", help="write a post-update report bundle")
+    p.add_argument("--out", help="output directory")
+    p.set_defaults(func=cmd_collect)
+
+    p = sub.add_parser("watch", help="install or remove the post-update watcher")
+    p.add_argument("action", choices=["install", "uninstall", "status"])
+    p.set_defaults(func=cmd_watch)
+
+    p = sub.add_parser("patches", help="list patches")
+    p.set_defaults(func=cmd_patches)
+
+    p = sub.add_parser("version", help="print versions")
+    p.set_defaults(func=cmd_version)
+
+    args = parser.parse_args(argv)
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

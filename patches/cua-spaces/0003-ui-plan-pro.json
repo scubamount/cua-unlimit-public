@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "id": "cua-spaces/0003-ui-plan-pro",
+  "app": "cua-spaces",
+  "title": "Show the account as Pro to remove the Free-plan banner",
+  "description": "Builds on 0002: sets plan to `pro` in the same relay-usage store. The always-on 'Use more computers at once with Pro' banner and the Free plan card's Upgrade button disappear; the plan row says Pro. The relay still reports the real plan and meters; this is client display only.",
+  "app_versions": [
+    "0.22.3",
+    "0.33.*",
+    "0.34.*",
+    "0.36.*",
+    "0.38.*",
+    "0.39.*",
+    "0.40.*",
+    "0.41.*"
+  ],
+  "builds": [],
+  "try_on_unknown": false,
+  "default": true,
+  "depends_on": [
+    "cua-spaces/0002-ui-sessions-uncap"
+  ],
+  "applied_if": [
+    "plan:\"pro\"",
+    "plan:\"teams\""
+  ],
+  "targets": [
+    {
+      "kind": "text",
+      "glob": "**/assets/*.js",
+      "find": "set(e){this.usage=e?.metered?{...e,hoursLimit:null,softLimitReached:!1,warnings:[],liveSessionsLimit:null}:null;",
+      "replace": "set(e){this.usage=e?.metered?{...e,hoursLimit:null,softLimitReached:!1,warnings:[],liveSessionsLimit:null,plan:\"pro\"}:null;",
+      "expect": 1
+    }
+  ],
+  "verify": [
+    {
+      "kind": "text_present",
+      "glob": "**/assets/*.js",
+      "text": "liveSessionsLimit:null,plan:\"pro\"}"
+    },
+    {
+      "kind": "js_syntax",
+      "glob": "**/assets/*.js"
+    }
+  ],
+  "notes": "Default. Makes Settings say Pro even though the relay still has the account on Free; the relay's counters and server-side enforcement are unchanged."
+}

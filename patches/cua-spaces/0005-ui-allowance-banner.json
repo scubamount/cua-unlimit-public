@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "id": "cua-spaces/0005-ui-allowance-banner",
+  "app": "cua-spaces",
+  "title": "Hide the Home relay-allowance banner",
+  "description": "Home renders the relay allowance card from the shell notice (ft()?.notice on 0.36, et()?.notice on 0.38), not from RelayUsageStore, so 0001 leaves the 20-hour card visible. Make the notice lookup falsy so the limit card and its meter never render.",
+  "app_versions": [
+    "0.36.*",
+    "0.38.*",
+    "0.39.*",
+    "0.40.*",
+    "0.41.*"
+  ],
+  "builds": [],
+  "try_on_unknown": false,
+  "default": true,
+  "depends_on": [],
+  "targets": [
+    {
+      "kind": "text",
+      "glob": "**/assets/index-*.js",
+      "find": "()?.notice,{openExternal:t}=",
+      "replace": "()?.notice&&null,{openExternal:t}=",
+      "expect": 1
+    }
+  ],
+  "verify": [
+    {
+      "kind": "text_present",
+      "glob": "**/assets/index-*.js",
+      "text": "()?.notice&&null,{openExternal:t}="
+    },
+    {
+      "kind": "text_absent",
+      "glob": "**/assets/index-*.js",
+      "text": "()?.notice,{openExternal:t}="
+    },
+    {
+      "kind": "js_syntax",
+      "glob": "**/assets/index-*.js"
+    }
+  ],
+  "applied_if": [
+    "()?.notice&&null,{openExternal:t}="
+  ],
+  "notes": "If the lookup moves, run collect and search the index chunk for relayAllowance or dismissKey. The core still posts the native 'remote hours used. Pro allows' notification; that text lives in core_bg-*.wasm."
+}
