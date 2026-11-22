@@ -1,6 +1,6 @@
 # cua-unlimit-public
 
-Reversible display patches for the Cua Spaces desktop client on macOS and Windows. The five bundled patches change how the client displays usage limits, upgrade prompts and the plan label. **They do not grant Pro or Teams, change billing, create seats, or override server-side limits.** The app itself is not included.
+Reversible display patches for the Cua Spaces desktop client on macOS and Windows. The defaults hide usage-limit notices and upgrade prompts and make Settings display **Teams**, even for a Free account. They do not grant Pro or Teams, change billing, create seats, or override server-side limits. The app itself is not included.
 
 ## Inspect before applying
 
@@ -22,6 +22,8 @@ python3 bin/cua-unlimit apply
 python3 bin/cua-unlimit doctor
 ```
 
-Reopen the app normally to see the changes. To restore all recorded changes, quit the app and run `python3 bin/cua-unlimit undo --all`. Keep the backup directory until restoration succeeds. A passing `doctor` check is not proof that the app can launch or that an account has a paid entitlement.
+Reopen the app normally to see the changes. The optional watcher can reapply patches after you restore the files. If you installed it, run `python3 bin/cua-unlimit watch uninstall` first. Then quit the app and run `python3 bin/cua-unlimit undo --all`. Keep the backup directory until restoration succeeds.
+
+`doctor` checks files, not whether the app launches or the account has a paid entitlement. Diagnostic reports are local and not redacted. Do not post them or backups in public issues.
 
 See the [command and recovery reference](docs/reference.md) for updates, backups, and diagnostic privacy. Run the fixture tests with `python3 -m unittest discover -s tests`. This independent tool is distributed under the [MIT license](LICENSE).
